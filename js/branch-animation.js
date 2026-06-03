@@ -5,9 +5,9 @@ const BRANCH_PAIRS = [
   { ramo: 'ramo4', palla: 'palla4' },
 ];
 
-const BRANCH_SPEED = 0.85;
-const BRANCH_PHASE_STEP = Math.PI * 0.35;
-const BRANCH_SWING = 14;
+const INTRO_DURATION = 2.8;
+const REFLECT_START = 0.5;
+const AXIS_TARGET_ANGLE = 180;
 
 function findItemByName(item, name) {
   if (item.name === name) return item;
@@ -51,6 +51,23 @@ function lowestPivotInParent(path, segmentSnapshot) {
   return path.localToParent(lowest);
 }
 
+function normalizeAngle(delta) {
+  let angle = delta % 360;
+  if (angle > 180) angle -= 360;
+  if (angle < -180) angle += 360;
+  return angle;
+}
+
+function computeStartRotation(segmentSnapshot) {
+  const first = segmentSnapshot[0].point;
+  const last = segmentSnapshot[segmentSnapshot.length - 1].point;
+  const pivot = first.y >= last.y ? first : last;
+  const other = first.y >= last.y ? last : first;
+  const axis = other.subtract(pivot);
+  if (axis.length < 1e-6) return 0;
+  return normalizeAngle(AXIS_TARGET_ANGLE - axis.angle);
+}
+
 function reflectPoint(point, lineStart, lineEnd) {
   const chord = lineEnd.subtract(lineStart);
   if (chord.length < 1e-6) return point.clone();
@@ -89,43 +106,72 @@ function applyBranchReflection(path, segmentSnapshot, amount) {
   });
 }
 
-function createBranchAnimator(ramo, palla, phase) {
+function applyBranchState(ramo, palla, ramoSnapshot, pallaSnapshot, pivot, rotation, reflectAmount) {
+  restorePath(ramo, ramoSnapshot);
+  restorePath(palla, pallaSnapshot);
+  applyBranchReflection(ramo, ramoSnapshot.segments, reflectAmount);
+  if (rotation !== 0) {
+    ramo.rotate(rotation, pivot);
+    palla.rotate(rotation, pivot);
+  }
+}
+
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2;
+}
+
+function createBranchAnimator(ramo, palla) {
   const ramoSnapshot = snapshotPath(ramo);
   const pallaSnapshot = snapshotPath(palla);
+  const startRotation = computeStartRotation(ramoSnapshot.segments);
 
   restorePath(ramo, ramoSnapshot);
   const pivot = lowestPivotInParent(ramo, ramoSnapshot.segments);
 
-  return (time) => {
-    const wave = Math.sin(time * BRANCH_SPEED + phase);
-    const reflectAmount = (wave + 1) / 2;
-    const angle = wave * BRANCH_SWING;
-
-    restorePath(ramo, ramoSnapshot);
-    restorePath(palla, pallaSnapshot);
-    applyBranchReflection(ramo, ramoSnapshot.segments, reflectAmount);
-    ramo.rotate(angle, pivot);
-    palla.rotate(angle, pivot);
+  return (progress) => {
+    const eased = easeInOutCubic(progress);
+    const rotation = startRotation * (1 - eased);
+    const reflectAmount = REFLECT_START * (1 - eased);
+    applyBranchState(
+      ramo,
+      palla,
+      ramoSnapshot,
+      pallaSnapshot,
+      pivot,
+      rotation,
+      reflectAmount
+    );
   };
 }
 
 function startBranchAnimations(logoRoot) {
   const animators = [];
 
-  BRANCH_PAIRS.forEach(({ ramo, palla }, index) => {
+  BRANCH_PAIRS.forEach(({ ramo, palla }) => {
     const ramoPath = findItemByName(logoRoot, ramo);
     const pallaPath = findItemByName(logoRoot, palla);
     if (!(ramoPath instanceof paper.Path) || !(pallaPath instanceof paper.Path)) {
       return;
     }
-    animators.push(
-      createBranchAnimator(ramoPath, pallaPath, index * BRANCH_PHASE_STEP)
-    );
+    animators.push(createBranchAnimator(ramoPath, pallaPath));
   });
 
   if (!animators.length) return null;
 
+  let startTime = null;
+
   return (event) => {
-    animators.forEach((update) => update(event.time));
+    if (startTime === null) {
+      startTime = event.time;
+      animators.forEach((update) => update(0));
+    }
+
+    const elapsed = event.time - startTime;
+    const progress = Math.min(elapsed / INTRO_DURATION, 1);
+    animators.forEach((update) => update(progress));
+
+    if (progress >= 1) {
+      paper.view.onFrame = null;
+    }
   };
 }

@@ -6,8 +6,11 @@ const BRANCH_PAIRS = [
 ];
 
 const INTRO_DURATION = 2.8;
-const REFLECT_START = 0.5;
-const AXIS_TARGET_ANGLE = 180;
+const HOLD_DURATION = 1.2;
+const OUTRO_DURATION = 2.8;
+const REFLECT_MID = 0.5;
+const AXIS_ANGLE_LEFT = 180;
+const AXIS_ANGLE_RIGHT = 0;
 
 function findItemByName(item, name) {
   if (item.name === name) return item;
@@ -58,14 +61,14 @@ function normalizeAngle(delta) {
   return angle;
 }
 
-function computeStartRotation(segmentSnapshot) {
+function computeRotationForAxis(segmentSnapshot, targetAngle) {
   const first = segmentSnapshot[0].point;
   const last = segmentSnapshot[segmentSnapshot.length - 1].point;
   const pivot = first.y >= last.y ? first : last;
   const other = first.y >= last.y ? last : first;
   const axis = other.subtract(pivot);
   if (axis.length < 1e-6) return 0;
-  return normalizeAngle(AXIS_TARGET_ANGLE - axis.angle);
+  return normalizeAngle(targetAngle - axis.angle);
 }
 
 function reflectPoint(point, lineStart, lineEnd) {
@@ -123,15 +126,19 @@ function easeInOutCubic(t) {
 function createBranchAnimator(ramo, palla) {
   const ramoSnapshot = snapshotPath(ramo);
   const pallaSnapshot = snapshotPath(palla);
-  const startRotation = computeStartRotation(ramoSnapshot.segments);
+  const rotationToLeft = computeRotationForAxis(
+    ramoSnapshot.segments,
+    AXIS_ANGLE_LEFT
+  );
+  const rotationToRight = computeRotationForAxis(
+    ramoSnapshot.segments,
+    AXIS_ANGLE_RIGHT
+  );
 
   restorePath(ramo, ramoSnapshot);
   const pivot = lowestPivotInParent(ramo, ramoSnapshot.segments);
 
-  return (progress) => {
-    const eased = easeInOutCubic(progress);
-    const rotation = startRotation * (1 - eased);
-    const reflectAmount = REFLECT_START * (1 - eased);
+  const apply = (rotation, reflectAmount) => {
     applyBranchState(
       ramo,
       palla,
@@ -141,6 +148,20 @@ function createBranchAnimator(ramo, palla) {
       rotation,
       reflectAmount
     );
+  };
+
+  return {
+    applyIntro(progress) {
+      const eased = easeInOutCubic(progress);
+      apply(rotationToLeft * (1 - eased), REFLECT_MID * (1 - eased));
+    },
+    applyHold() {
+      apply(0, 0);
+    },
+    applyOutro(progress) {
+      const eased = easeInOutCubic(progress);
+      apply(rotationToRight * eased, REFLECT_MID * eased);
+    },
   };
 }
 
@@ -158,20 +179,58 @@ function startBranchAnimations(logoRoot) {
 
   if (!animators.length) return null;
 
-  let startTime = null;
+  let phase = 'intro';
+  let phaseStartTime = null;
+
+  const runPhase = (progress) => {
+    if (phase === 'intro') {
+      animators.forEach((animator) => animator.applyIntro(progress));
+    } else if (phase === 'hold') {
+      animators.forEach((animator) => animator.applyHold());
+    } else if (phase === 'outro') {
+      animators.forEach((animator) => animator.applyOutro(progress));
+    }
+  };
+
+  const advancePhase = (eventTime) => {
+    phaseStartTime = eventTime;
+    if (phase === 'intro') {
+      phase = 'hold';
+      runPhase(0);
+    } else if (phase === 'hold') {
+      phase = 'outro';
+      runPhase(0);
+    }
+  };
 
   return (event) => {
-    if (startTime === null) {
-      startTime = event.time;
-      animators.forEach((update) => update(0));
+    if (phaseStartTime === null) {
+      phaseStartTime = event.time;
+      runPhase(0);
     }
 
-    const elapsed = event.time - startTime;
-    const progress = Math.min(elapsed / INTRO_DURATION, 1);
-    animators.forEach((update) => update(progress));
+    const elapsed = event.time - phaseStartTime;
 
-    if (progress >= 1) {
-      paper.view.onFrame = null;
+    if (phase === 'intro') {
+      const progress = Math.min(elapsed / INTRO_DURATION, 1);
+      runPhase(progress);
+      if (progress >= 1) advancePhase(event.time);
+      return;
+    }
+
+    if (phase === 'hold') {
+      runPhase(0);
+      if (elapsed >= HOLD_DURATION) advancePhase(event.time);
+      return;
+    }
+
+    if (phase === 'outro') {
+      const progress = Math.min(elapsed / OUTRO_DURATION, 1);
+      runPhase(progress);
+      if (progress >= 1) {
+        runPhase(1);
+        paper.view.onFrame = null;
+      }
     }
   };
 }

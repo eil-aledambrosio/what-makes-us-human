@@ -7,6 +7,12 @@ const BRANCH_PAIRS = [
 
 const INTRO_DURATION = 2.8;
 const HOLD_DURATION = 1.2;
+const HOLD_FADE_OUT = 0.35;
+const HOLD_ROTATION_SWING = 2.2;
+const HOLD_REFLECT_SWING = 0.05;
+const HOLD_ROTATION_SPEED = 0.75;
+const HOLD_REFLECT_SPEED = 0.95;
+const HOLD_PHASE_STEP = 0.7;
 const OUTRO_DURATION = 2.8;
 const REFLECT_MID = 0.5;
 const AXIS_ANGLE_LEFT = 180;
@@ -123,7 +129,7 @@ function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2;
 }
 
-function createBranchAnimator(ramo, palla) {
+function createBranchAnimator(ramo, palla, phaseOffset) {
   const ramoSnapshot = snapshotPath(ramo);
   const pallaSnapshot = snapshotPath(palla);
   const rotationToLeft = computeRotationForAxis(
@@ -155,8 +161,16 @@ function createBranchAnimator(ramo, palla) {
       const eased = easeInOutCubic(progress);
       apply(rotationToLeft * (1 - eased), REFLECT_MID * (1 - eased));
     },
-    applyHold() {
-      apply(0, 0);
+    applyHold(elapsed, fade) {
+      const rotation =
+        Math.sin(elapsed * HOLD_ROTATION_SPEED + phaseOffset) *
+        HOLD_ROTATION_SWING *
+        fade;
+      const reflectAmount =
+        ((Math.sin(elapsed * HOLD_REFLECT_SPEED + phaseOffset * 1.3) + 1) / 2) *
+        HOLD_REFLECT_SWING *
+        fade;
+      apply(rotation, reflectAmount);
     },
     applyOutro(progress) {
       const eased = easeInOutCubic(progress);
@@ -168,13 +182,15 @@ function createBranchAnimator(ramo, palla) {
 function startBranchAnimations(logoRoot) {
   const animators = [];
 
-  BRANCH_PAIRS.forEach(({ ramo, palla }) => {
+  BRANCH_PAIRS.forEach(({ ramo, palla }, index) => {
     const ramoPath = findItemByName(logoRoot, ramo);
     const pallaPath = findItemByName(logoRoot, palla);
     if (!(ramoPath instanceof paper.Path) || !(pallaPath instanceof paper.Path)) {
       return;
     }
-    animators.push(createBranchAnimator(ramoPath, pallaPath));
+    animators.push(
+      createBranchAnimator(ramoPath, pallaPath, index * HOLD_PHASE_STEP)
+    );
   });
 
   if (!animators.length) return null;
@@ -182,11 +198,19 @@ function startBranchAnimations(logoRoot) {
   let phase = 'intro';
   let phaseStartTime = null;
 
-  const runPhase = (progress) => {
+  const holdFade = (elapsed) => {
+    if (elapsed >= HOLD_DURATION - HOLD_FADE_OUT) {
+      return Math.max(0, (HOLD_DURATION - elapsed) / HOLD_FADE_OUT);
+    }
+    return 1;
+  };
+
+  const runPhase = (progress, elapsed) => {
     if (phase === 'intro') {
       animators.forEach((animator) => animator.applyIntro(progress));
     } else if (phase === 'hold') {
-      animators.forEach((animator) => animator.applyHold());
+      const fade = holdFade(elapsed);
+      animators.forEach((animator) => animator.applyHold(elapsed, fade));
     } else if (phase === 'outro') {
       animators.forEach((animator) => animator.applyOutro(progress));
     }
@@ -196,39 +220,39 @@ function startBranchAnimations(logoRoot) {
     phaseStartTime = eventTime;
     if (phase === 'intro') {
       phase = 'hold';
-      runPhase(0);
+      runPhase(0, 0);
     } else if (phase === 'hold') {
       phase = 'outro';
-      runPhase(0);
+      runPhase(0, 0);
     }
   };
 
   return (event) => {
     if (phaseStartTime === null) {
       phaseStartTime = event.time;
-      runPhase(0);
+      runPhase(0, 0);
     }
 
     const elapsed = event.time - phaseStartTime;
 
     if (phase === 'intro') {
       const progress = Math.min(elapsed / INTRO_DURATION, 1);
-      runPhase(progress);
+      runPhase(progress, elapsed);
       if (progress >= 1) advancePhase(event.time);
       return;
     }
 
     if (phase === 'hold') {
-      runPhase(0);
+      runPhase(0, elapsed);
       if (elapsed >= HOLD_DURATION) advancePhase(event.time);
       return;
     }
 
     if (phase === 'outro') {
       const progress = Math.min(elapsed / OUTRO_DURATION, 1);
-      runPhase(progress);
+      runPhase(progress, elapsed);
       if (progress >= 1) {
-        runPhase(1);
+        runPhase(1, elapsed);
         paper.view.onFrame = null;
       }
     }

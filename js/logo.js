@@ -17,6 +17,8 @@ function placeLogo(item) {
   }
   logoItem = item;
   fitLogo(logoItem);
+
+  paper.view.onFrame = startBranchAnimations(logoItem);
 }
 
 paper.project.importSVG(LOGO_URL, {

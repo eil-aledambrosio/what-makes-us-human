@@ -13,7 +13,9 @@ const HOLD_REFLECT_SWING = 0.05;
 const HOLD_ROTATION_SPEED = 0.75;
 const HOLD_REFLECT_SPEED = 0.95;
 const HOLD_PHASE_STEP = 0.7;
+const SETTLE_DURATION = 0.25;
 const OUTRO_DURATION = 2.8;
+const OUTRO_BLEND = 0.55;
 const REFLECT_MID = 0.5;
 const AXIS_ANGLE_LEFT = 180;
 const AXIS_ANGLE_RIGHT = 0;
@@ -129,6 +131,11 @@ function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2;
 }
 
+function smoothstep(edge0, edge1, x) {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
 function createBranchAnimator(ramo, palla, phaseOffset) {
   const ramoSnapshot = snapshotPath(ramo);
   const pallaSnapshot = snapshotPath(palla);
@@ -157,9 +164,13 @@ function createBranchAnimator(ramo, palla, phaseOffset) {
   };
 
   return {
-    applyIntro(progress) {
+    applyIntro(progress, reverse) {
       const eased = easeInOutCubic(progress);
-      apply(rotationToLeft * (1 - eased), REFLECT_MID * (1 - eased));
+      if (!reverse) {
+        apply(rotationToLeft * (1 - eased), REFLECT_MID * (1 - eased));
+      } else {
+        apply(rotationToLeft * eased, REFLECT_MID * eased);
+      }
     },
     applyHold(elapsed, fade) {
       const rotation =
@@ -172,9 +183,15 @@ function createBranchAnimator(ramo, palla, phaseOffset) {
         fade;
       apply(rotation, reflectAmount);
     },
-    applyOutro(progress) {
-      const eased = easeInOutCubic(progress);
-      apply(rotationToRight * eased, REFLECT_MID * eased);
+    applySettle() {
+      apply(0, 0);
+    },
+    applyOutro(progress, outroElapsed, reverse) {
+      const ramp = reverse
+        ? smoothstep(0, OUTRO_BLEND, OUTRO_DURATION - outroElapsed)
+        : smoothstep(0, OUTRO_BLEND, outroElapsed);
+      const eased = easeInOutCubic(reverse ? 1 - progress : progress);
+      apply(rotationToRight * eased * ramp, REFLECT_MID * eased * ramp);
     },
   };
 }
@@ -197,8 +214,18 @@ function startBranchAnimations(logoRoot) {
 
   let phase = 'intro';
   let phaseStartTime = null;
+  let isReversed = false;
 
   const holdFade = (elapsed) => {
+    if (!isReversed) {
+      if (elapsed >= HOLD_DURATION - HOLD_FADE_OUT) {
+        return Math.max(0, (HOLD_DURATION - elapsed) / HOLD_FADE_OUT);
+      }
+      return 1;
+    }
+    if (elapsed < HOLD_FADE_OUT) {
+      return elapsed / HOLD_FADE_OUT;
+    }
     if (elapsed >= HOLD_DURATION - HOLD_FADE_OUT) {
       return Math.max(0, (HOLD_DURATION - elapsed) / HOLD_FADE_OUT);
     }
@@ -207,24 +234,40 @@ function startBranchAnimations(logoRoot) {
 
   const runPhase = (progress, elapsed) => {
     if (phase === 'intro') {
-      animators.forEach((animator) => animator.applyIntro(progress));
+      animators.forEach((animator) => animator.applyIntro(progress, isReversed));
     } else if (phase === 'hold') {
-      const fade = holdFade(elapsed);
-      animators.forEach((animator) => animator.applyHold(elapsed, fade));
+      const holdElapsed = Math.min(elapsed, HOLD_DURATION);
+      const fade = holdFade(holdElapsed);
+      animators.forEach((animator) => animator.applyHold(holdElapsed, fade));
+    } else if (phase === 'settle') {
+      animators.forEach((animator) => animator.applySettle());
     } else if (phase === 'outro') {
-      animators.forEach((animator) => animator.applyOutro(progress));
+      animators.forEach((animator) =>
+        animator.applyOutro(progress, elapsed, isReversed)
+      );
     }
   };
 
   const advancePhase = (eventTime) => {
     phaseStartTime = eventTime;
-    if (phase === 'intro') {
-      phase = 'hold';
-      runPhase(0, 0);
-    } else if (phase === 'hold') {
-      phase = 'outro';
-      runPhase(0, 0);
+
+    if (!isReversed) {
+      if (phase === 'intro') phase = 'hold';
+      else if (phase === 'hold') phase = 'settle';
+      else if (phase === 'settle') phase = 'outro';
+      else if (phase === 'outro') {
+        isReversed = true;
+        phase = 'outro';
+      }
+    } else if (phase === 'outro') phase = 'settle';
+    else if (phase === 'settle') phase = 'hold';
+    else if (phase === 'hold') phase = 'intro';
+    else if (phase === 'intro') {
+      isReversed = false;
+      phase = 'intro';
     }
+
+    runPhase(0, 0);
   };
 
   return (event) => {
@@ -248,13 +291,16 @@ function startBranchAnimations(logoRoot) {
       return;
     }
 
+    if (phase === 'settle') {
+      runPhase(0, elapsed);
+      if (elapsed >= SETTLE_DURATION) advancePhase(event.time);
+      return;
+    }
+
     if (phase === 'outro') {
       const progress = Math.min(elapsed / OUTRO_DURATION, 1);
       runPhase(progress, elapsed);
-      if (progress >= 1) {
-        runPhase(1, elapsed);
-        paper.view.onFrame = null;
-      }
+      if (progress >= 1) advancePhase(event.time);
     }
   };
 }

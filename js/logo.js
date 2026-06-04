@@ -1,12 +1,13 @@
 paper.setup('logo-canvas');
 
 const LOGO_URL = 'logo.svg';
-const PADDING = 0.9;
 
 let logoItem = null;
 
 function fitLogo(item) {
-  const target = paper.view.bounds.scale(PADDING);
+  const isMobile = paper.view.bounds.width < 600;
+  const padding = isMobile ? 0.4 : 0.85;
+  const target = paper.view.bounds.scale(padding);
   item.fitBounds(target, true);
   item.position = paper.view.center;
 }

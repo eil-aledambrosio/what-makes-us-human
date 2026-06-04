@@ -2,13 +2,13 @@
   'use strict';
 
   var WORD_ORDER = ['living', 'asterischi', 'tracing', 'moving', 'breathing'];
-  var CYCLE_MS = 200;
-  var FADE_MS = 150;
+  var FADE_MS = 300;
+  var HOLD_MS = 600;
 
   var words = {};
   var activeWord = 'living';
   var cycleIndex = 0;
-  var cycleTimer = null;
+  var chainTimer = null;
   var rafId = null;
   var stopping = false;
 
@@ -16,6 +16,13 @@
     if (rafId) {
       cancelAnimationFrame(rafId);
       rafId = null;
+    }
+  }
+
+  function cancelChain() {
+    if (chainTimer) {
+      clearTimeout(chainTimer);
+      chainTimer = null;
     }
   }
 
@@ -40,17 +47,26 @@
     rafId = requestAnimationFrame(tick);
   }
 
-  function showWord(name) {
-    words[name].opacity = 1;
-  }
-
-  function hideWord(name) {
-    words[name].opacity = 0;
+  function showNext(loop) {
+    chainTimer = setTimeout(function () {
+      chainTimer = null;
+      var g = words[WORD_ORDER[cycleIndex]];
+      tween(g, 1, function () {
+        chainTimer = setTimeout(function () {
+          chainTimer = null;
+          tween(g, 0, function () {
+            cycleIndex = (cycleIndex + 1) % WORD_ORDER.length;
+            if (cycleIndex === 0 && !loop) return;
+            showNext(true);
+          });
+        }, HOLD_MS);
+      });
+    }, 0);
   }
 
   function startCycle() {
-    if (cycleTimer) return;
     cancelTween();
+    cancelChain();
     stopping = false;
 
     if (activeWord && words[activeWord]) {
@@ -58,28 +74,21 @@
     }
 
     cycleIndex = 0;
-    showWord(WORD_ORDER[cycleIndex]);
     activeWord = null;
-
-    cycleTimer = setInterval(function () {
-      hideWord(WORD_ORDER[cycleIndex]);
-      cycleIndex = (cycleIndex + 1) % WORD_ORDER.length;
-      showWord(WORD_ORDER[cycleIndex]);
-    }, CYCLE_MS);
+    showNext(true);
   }
 
   function stopCycle() {
     if (stopping) return;
-    if (!cycleTimer && !rafId) return;
+    if (!chainTimer && !rafId) return;
     stopping = true;
 
     cancelTween();
-    if (cycleTimer) {
-      clearInterval(cycleTimer);
-      cycleTimer = null;
-    }
+    cancelChain();
 
-    hideWord(WORD_ORDER[cycleIndex]);
+    if (words[WORD_ORDER[cycleIndex]]) {
+      words[WORD_ORDER[cycleIndex]].opacity = 0;
+    }
 
     var r = Math.floor(Math.random() * WORD_ORDER.length);
     var w = WORD_ORDER[r];

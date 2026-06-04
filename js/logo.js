@@ -6,7 +6,7 @@ let logoItem = null;
 
 function fitLogo(item) {
   const isMobile = paper.view.bounds.width < 600;
-  const padding = isMobile ? 0.4 : 0.85;
+  const padding = isMobile ? 1.0 : 0.85;
   const target = paper.view.bounds.scale(padding);
   item.fitBounds(target, true);
   item.position = paper.view.center;

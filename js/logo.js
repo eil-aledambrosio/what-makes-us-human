@@ -20,6 +20,10 @@ function placeLogo(item) {
   fitLogo(logoItem);
 
   paper.view.onFrame = startBranchAnimations(logoItem);
+
+  if (window.textSwitcherInit) {
+    window.textSwitcherInit(logoItem);
+  }
 }
 
 paper.project.importSVG(LOGO_URL, {

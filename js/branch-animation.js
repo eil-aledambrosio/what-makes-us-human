@@ -245,7 +245,7 @@ function startBranchAnimations(logoRoot) {
     if (!(ramoPath instanceof paper.Path) || !(pallaPath instanceof paper.Path)) {
       return;
     }
-    ramoPath.strokeWidth = 8.5;
+    ramoPath.strokeWidth = 6.5;
     const swingMultiplier = index === 1 || index === 2 ? 2.5 : 0.5;
     animators.push(
       createBranchAnimator(ramoPath, pallaPath, index * HOLD_PHASE_STEP, swingMultiplier)

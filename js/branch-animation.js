@@ -186,7 +186,16 @@ function createBranchAnimator(ramo, palla, phaseOffset, swingMultiplier) {
         mainRot = rotationToLeft * eased;
         mainRef = REFLECT_MID * eased;
       }
-      const micro = microOsc(totalTime, MICRO_AMP_SWING);
+      let amp = MICRO_AMP_SWING;
+      if (!reverse) {
+        const blend = smoothstep(0, 0.5, progress * INTRO_DURATION);
+        amp = MICRO_AMP_PAUSE + (MICRO_AMP_SWING - MICRO_AMP_PAUSE) * blend;
+      } else {
+        const remaining = (1 - progress) * INTRO_DURATION;
+        const blend = smoothstep(0, 0.5, remaining);
+        amp = MICRO_AMP_SWING + (MICRO_AMP_PAUSE - MICRO_AMP_SWING) * (1 - blend);
+      }
+      const micro = microOsc(totalTime, amp);
       apply(mainRot + micro.rot, mainRef + micro.ref);
     },
     applyHold(elapsed, fade, totalTime) {
@@ -213,7 +222,15 @@ function createBranchAnimator(ramo, palla, phaseOffset, swingMultiplier) {
       const eased = easeInOutCubic(reverse ? 1 - progress : progress);
       const mainRot = rotationToRight * eased * ramp;
       const mainRef = REFLECT_MID * eased * ramp;
-      const micro = microOsc(totalTime, MICRO_AMP_SWING);
+      let amp = MICRO_AMP_SWING;
+      if (!reverse) {
+        const blend = smoothstep(OUTRO_DURATION - 0.5, OUTRO_DURATION, outroElapsed);
+        amp = MICRO_AMP_SWING + (MICRO_AMP_PAUSE - MICRO_AMP_SWING) * blend;
+      } else {
+        const blend = smoothstep(0, 0.5, outroElapsed);
+        amp = MICRO_AMP_PAUSE + (MICRO_AMP_SWING - MICRO_AMP_PAUSE) * blend;
+      }
+      const micro = microOsc(totalTime, amp);
       apply(mainRot + micro.rot, mainRef + micro.ref);
     },
   };
@@ -228,8 +245,7 @@ function startBranchAnimations(logoRoot) {
     if (!(ramoPath instanceof paper.Path) || !(pallaPath instanceof paper.Path)) {
       return;
     }
-    ramoPath.strokeWidth = 14;
-    ramoPath.strokeScaling = false;
+    ramoPath.strokeWidth = 8.5;
     const swingMultiplier = index === 1 || index === 2 ? 2.5 : 0.5;
     animators.push(
       createBranchAnimator(ramoPath, pallaPath, index * HOLD_PHASE_STEP, swingMultiplier)

@@ -16,6 +16,7 @@ function placeLogo(item) {
     logoItem.remove();
   }
   logoItem = item;
+  logoItem.applyMatrix = false;
   fitLogo(logoItem);
 
   paper.view.onFrame = startBranchAnimations(logoItem);

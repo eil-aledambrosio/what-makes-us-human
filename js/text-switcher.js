@@ -3,7 +3,7 @@
 
   var WORD_ORDER = ['living', 'asterischi', 'tracing', 'moving', 'breathing'];
   var FADE_MS = 300;
-  var HOLD_MS = 900;
+  var HOLD_MS = 1900;
 
   var words = {};
   var activeWord = 'living';

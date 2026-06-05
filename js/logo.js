@@ -5,8 +5,7 @@ const LOGO_URL = 'logo.svg';
 let logoItem = null;
 
 function fitLogo(item) {
-  const isMobile = paper.view.bounds.width < 600;
-  const padding = isMobile ? 0.16 : 0.85;
+  const padding = 0.75;
   const target = paper.view.bounds.scale(padding);
   item.fitBounds(target, true);
   item.position = paper.view.center;
@@ -28,7 +27,6 @@ function placeLogo(item) {
 }
 
 paper.project.importSVG(LOGO_URL, {
-  expand: true,
   onLoad: placeLogo,
   onError: () => console.error('Impossibile caricare', LOGO_URL),
 });

@@ -3,14 +3,13 @@
 
   var WORD_ORDER = ['living', 'asterischi', 'tracing', 'moving', 'breathing'];
   var FADE_MS = 300;
-  var HOLD_MS = 600;
+  var HOLD_MS = 900;
 
   var words = {};
   var activeWord = 'living';
   var cycleIndex = 0;
   var chainTimer = null;
   var rafId = null;
-  var stopping = false;
 
   function cancelTween() {
     if (rafId) {
@@ -67,7 +66,6 @@
   function startCycle() {
     cancelTween();
     cancelChain();
-    stopping = false;
 
     if (activeWord && words[activeWord]) {
       words[activeWord].opacity = 0;
@@ -76,24 +74,6 @@
     cycleIndex = 0;
     activeWord = null;
     showNext(true);
-  }
-
-  function stopCycle() {
-    if (stopping) return;
-    if (!chainTimer && !rafId) return;
-    stopping = true;
-
-    cancelTween();
-    cancelChain();
-
-    if (words[WORD_ORDER[cycleIndex]]) {
-      words[WORD_ORDER[cycleIndex]].opacity = 0;
-    }
-
-    var r = Math.floor(Math.random() * WORD_ORDER.length);
-    var w = WORD_ORDER[r];
-    activeWord = w;
-    tween(words[w], 1, function () { stopping = false; });
   }
 
   window.textSwitcherInit = function (logoItem) {
@@ -111,16 +91,6 @@
     words.living.opacity = 1;
     activeWord = 'living';
 
-    logoItem.onMouseEnter = startCycle;
-    logoItem.onMouseLeave = stopCycle;
-
-    var canvas = document.getElementById('logo-canvas');
-    if (!canvas) return;
-
-    canvas.addEventListener('touchstart', function (e) {
-      e.preventDefault();
-      startCycle();
-    }, { passive: false });
-    canvas.addEventListener('touchend', stopCycle);
+    startCycle();
   };
 })();

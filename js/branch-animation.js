@@ -6,21 +6,16 @@ const BRANCH_PAIRS = [
 ];
 
 const INTRO_DURATION = 2.8;
-const HOLD_DURATION = 3.0;
-const HOLD_FADE_IN = 0.5;
-const HOLD_FADE_OUT = 0.5;
+const OUTRO_DURATION = 2.8;
+const OUTRO_BLEND = 0.55;
+const REFLECT_MID = 0.5;
+const MICRO_AMP_SWING = 0.12;
+const MICRO_AMP_PAUSE = 1.20;
 const HOLD_ROTATION_SWING = 2.2;
 const HOLD_REFLECT_SWING = 0.05;
 const HOLD_ROTATION_SPEED = 0.75;
 const HOLD_REFLECT_SPEED = 0.95;
 const HOLD_PHASE_STEP = 0.7;
-const PAUSE_DURATION = 3.0;
-const SETTLE_DURATION = 0.25;
-const OUTRO_DURATION = 2.8;
-const OUTRO_BLEND = 0.55;
-const REFLECT_MID = 0.5;
-const MICRO_AMP_SWING = 0.12;
-const MICRO_AMP_PAUSE = 0.30;
 const AXIS_ANGLE_LEFT = 180;
 const AXIS_ANGLE_RIGHT = 0;
 
@@ -186,34 +181,8 @@ function createBranchAnimator(ramo, palla, phaseOffset, swingMultiplier) {
         mainRot = rotationToLeft * eased;
         mainRef = REFLECT_MID * eased;
       }
-      let amp = MICRO_AMP_SWING;
-      if (!reverse) {
-        const blend = smoothstep(0, 0.5, progress * INTRO_DURATION);
-        amp = MICRO_AMP_PAUSE + (MICRO_AMP_SWING - MICRO_AMP_PAUSE) * blend;
-      } else {
-        const remaining = (1 - progress) * INTRO_DURATION;
-        const blend = smoothstep(0, 0.5, remaining);
-        amp = MICRO_AMP_SWING + (MICRO_AMP_PAUSE - MICRO_AMP_SWING) * (1 - blend);
-      }
-      const micro = microOsc(totalTime, amp);
+      const micro = microOsc(totalTime, MICRO_AMP_PAUSE);
       apply(mainRot + micro.rot, mainRef + micro.ref);
-    },
-    applyHold(elapsed, fade, totalTime) {
-      const amplitude = MICRO_AMP_SWING + (1 - MICRO_AMP_SWING) * fade;
-      const micro = microOsc(totalTime, amplitude);
-      apply(micro.rot, micro.ref);
-    },
-    applySettle(totalTime) {
-      const micro = microOsc(totalTime, MICRO_AMP_SWING);
-      apply(micro.rot, micro.ref);
-    },
-    applyPauseOutro(totalTime) {
-      const micro = microOsc(totalTime, MICRO_AMP_PAUSE);
-      apply(rotationToRight + micro.rot, REFLECT_MID + micro.ref);
-    },
-    applyPauseIntro(totalTime) {
-      const micro = microOsc(totalTime, MICRO_AMP_PAUSE);
-      apply(rotationToLeft + micro.rot, REFLECT_MID + micro.ref);
     },
     applyOutro(progress, outroElapsed, reverse, totalTime) {
       const ramp = reverse
@@ -222,15 +191,7 @@ function createBranchAnimator(ramo, palla, phaseOffset, swingMultiplier) {
       const eased = easeInOutCubic(reverse ? 1 - progress : progress);
       const mainRot = rotationToRight * eased * ramp;
       const mainRef = REFLECT_MID * eased * ramp;
-      let amp = MICRO_AMP_SWING;
-      if (!reverse) {
-        const blend = smoothstep(OUTRO_DURATION - 0.5, OUTRO_DURATION, outroElapsed);
-        amp = MICRO_AMP_SWING + (MICRO_AMP_PAUSE - MICRO_AMP_SWING) * blend;
-      } else {
-        const blend = smoothstep(0, 0.5, outroElapsed);
-        amp = MICRO_AMP_PAUSE + (MICRO_AMP_SWING - MICRO_AMP_PAUSE) * blend;
-      }
-      const micro = microOsc(totalTime, amp);
+      const micro = microOsc(totalTime, MICRO_AMP_PAUSE);
       apply(mainRot + micro.rot, mainRef + micro.ref);
     },
   };
@@ -259,42 +220,13 @@ function startBranchAnimations(logoRoot) {
   let animationStartTime = null;
   let isReversed = false;
 
-  const holdFade = (elapsed) => {
-    if (!isReversed) {
-      if (elapsed < HOLD_FADE_IN) {
-        return elapsed / HOLD_FADE_IN;
-      }
-      if (elapsed >= HOLD_DURATION - HOLD_FADE_OUT) {
-        return Math.max(0, (HOLD_DURATION - elapsed) / HOLD_FADE_OUT);
-      }
-      return 1;
-    }
-    if (elapsed < HOLD_FADE_IN) {
-      return elapsed / HOLD_FADE_IN;
-    }
-    if (elapsed >= HOLD_DURATION - HOLD_FADE_OUT) {
-      return Math.max(0, (HOLD_DURATION - elapsed) / HOLD_FADE_OUT);
-    }
-    return 1;
-  };
-
   const runPhase = (progress, elapsed, totalTime) => {
     if (phase === 'intro') {
       animators.forEach((animator) => animator.applyIntro(progress, isReversed, totalTime));
-    } else if (phase === 'hold') {
-      const holdElapsed = Math.min(elapsed, HOLD_DURATION);
-      const fade = holdFade(holdElapsed);
-      animators.forEach((animator) => animator.applyHold(holdElapsed, fade, totalTime));
-    } else if (phase === 'settle') {
-      animators.forEach((animator) => animator.applySettle(totalTime));
     } else if (phase === 'outro') {
       animators.forEach((animator) =>
         animator.applyOutro(progress, elapsed, isReversed, totalTime)
       );
-    } else if (phase === 'pauseOutro') {
-      animators.forEach((animator) => animator.applyPauseOutro(totalTime));
-    } else if (phase === 'pauseIntro') {
-      animators.forEach((animator) => animator.applyPauseIntro(totalTime));
     }
   };
 
@@ -302,21 +234,17 @@ function startBranchAnimations(logoRoot) {
     phaseStartTime = eventTime;
 
     if (!isReversed) {
-      if (phase === 'intro') phase = 'hold';
-      else if (phase === 'hold') phase = 'settle';
-      else if (phase === 'settle') phase = 'outro';
-      else if (phase === 'outro') phase = 'pauseOutro';
-      else if (phase === 'pauseOutro') {
+      if (phase === 'intro') phase = 'outro';
+      else if (phase === 'outro') {
         isReversed = true;
         phase = 'outro';
       }
-    } else if (phase === 'outro') phase = 'settle';
-    else if (phase === 'settle') phase = 'hold';
-    else if (phase === 'hold') phase = 'intro';
-    else if (phase === 'intro') phase = 'pauseIntro';
-    else if (phase === 'pauseIntro') {
-      isReversed = false;
-      phase = 'intro';
+    } else {
+      if (phase === 'outro') phase = 'intro';
+      else if (phase === 'intro') {
+        isReversed = false;
+        phase = 'intro';
+      }
     }
 
     runPhase(0, 0, totalTime);
@@ -339,28 +267,11 @@ function startBranchAnimations(logoRoot) {
       return;
     }
 
-    if (phase === 'hold') {
-      runPhase(0, elapsed, totalTime);
-      if (elapsed >= HOLD_DURATION) advancePhase(event.time, totalTime);
-      return;
-    }
-
-    if (phase === 'settle') {
-      runPhase(0, elapsed, totalTime);
-      if (elapsed >= SETTLE_DURATION) advancePhase(event.time, totalTime);
-      return;
-    }
-
     if (phase === 'outro') {
       const progress = Math.min(elapsed / OUTRO_DURATION, 1);
       runPhase(progress, elapsed, totalTime);
       if (progress >= 1) advancePhase(event.time, totalTime);
       return;
-    }
-
-    if (phase === 'pauseOutro' || phase === 'pauseIntro') {
-      runPhase(0, elapsed, totalTime);
-      if (elapsed >= PAUSE_DURATION) advancePhase(event.time, totalTime);
     }
   };
 }
